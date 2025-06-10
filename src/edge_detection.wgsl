@@ -33,17 +33,14 @@ struct EdgeDetectionUniform {
     depth_threshold: f32,
     normal_threshold: f32,
     color_threshold: f32,
-
     depth_thickness: f32,
     normal_thickness: f32,
     color_thickness: f32,
-    
     steep_angle_threshold: f32,
     steep_angle_multiplier: f32,
 
     // xy: distortion frequency; zw: distortion strength
     uv_distortion: vec4f,
-
     edge_color: vec4f,
 }
 
@@ -78,10 +75,10 @@ fn position_ndc_to_world(ndc_pos: vec3<f32>) -> vec3<f32> {
 fn calculate_view(world_position: vec3f) -> vec3f {
 #ifdef VIEW_PROJECTION_ORTHOGRAPHIC
         // Orthographic view vector
-        return normalize(vec3f(view.clip_from_world[0].z, view.clip_from_world[1].z, view.clip_from_world[2].z));
+    return normalize(vec3f(view.clip_from_world[0].z, view.clip_from_world[1].z, view.clip_from_world[2].z));
 #else
         // Only valid for a perspective projection
-        return normalize(view.world_position.xyz - world_position.xyz);
+    return normalize(view.world_position.xyz - world_position.xyz);
 #endif
 }
 
@@ -106,28 +103,22 @@ fn prepass_view_z(uv: vec2f) -> f32 {
 
 fn view_z_gradient_x(uv: vec2f, y: f32, thickness: f32) -> f32 {
     let l_coord = uv + texel_size * vec2f(-thickness, y);    // left  coordinate
-    let r_coord = uv + texel_size * vec2f( thickness, y);    // right coordinate
+    let r_coord = uv + texel_size * vec2f(thickness, y);    // right coordinate
 
-    return prepass_view_z(r_coord) - prepass_view_z(l_coord); 
+    return prepass_view_z(r_coord) - prepass_view_z(l_coord);
 }
 
 fn view_z_gradient_y(uv: vec2f, x: f32, thickness: f32) -> f32 {
     let d_coord = uv + texel_size * vec2f(x, -thickness);    // down coordinate
-    let t_coord = uv + texel_size * vec2f(x,  thickness);    // top  coordinate
+    let t_coord = uv + texel_size * vec2f(x, thickness);    // top  coordinate
 
     return prepass_view_z(t_coord) - prepass_view_z(d_coord);
 }
 
 fn detect_edge_depth(uv: vec2f, thickness: f32, fresnel: f32) -> f32 {
-    let deri_x = 
-        view_z_gradient_x(uv, thickness, thickness) +
-        2.0 * view_z_gradient_x(uv, 0.0, thickness) +
-        view_z_gradient_x(uv, -thickness, thickness);
+    let deri_x = view_z_gradient_x(uv, thickness, thickness) + 2.0 * view_z_gradient_x(uv, 0.0, thickness) + view_z_gradient_x(uv, -thickness, thickness);
 
-    let deri_y =
-        view_z_gradient_y(uv, thickness, thickness) +
-        2.0 * view_z_gradient_y(uv, 0.0, thickness) +
-        view_z_gradient_y(uv, -thickness, thickness);
+    let deri_y = view_z_gradient_y(uv, thickness, thickness) + 2.0 * view_z_gradient_y(uv, 0.0, thickness) + view_z_gradient_y(uv, -thickness, thickness);
 
     // why not `let grad = sqrt(deri_x * deri_x + deri_y * deri_y);`?
     //
@@ -137,8 +128,7 @@ fn detect_edge_depth(uv: vec2f, thickness: f32, fresnel: f32) -> f32 {
 
     let view_z = abs(prepass_view_z(uv));
 
-    let steep_angle_adjustment = 
-        smoothstep(ed_uniform.steep_angle_threshold, 1.0, fresnel) * ed_uniform.steep_angle_multiplier * view_z;
+    let steep_angle_adjustment = smoothstep(ed_uniform.steep_angle_threshold, 1.0, fresnel) * ed_uniform.steep_angle_multiplier * view_z;
 
     return f32(grad > ed_uniform.depth_threshold * (1.0 + steep_angle_adjustment));
 }
@@ -164,32 +154,30 @@ fn prepass_normal(uv: vec2f) -> vec3f {
 
 fn normal_gradient_x(uv: vec2f, y: f32, thickness: f32) -> vec3f {
     let l_coord = uv + texel_size * vec2f(-thickness, y);    // left  coordinate
-    let r_coord = uv + texel_size * vec2f( thickness, y);    // right coordinate
+    let r_coord = uv + texel_size * vec2f(thickness, y);    // right coordinate
 
     return prepass_normal(r_coord) - prepass_normal(l_coord);
 }
 
 fn normal_gradient_y(uv: vec2f, x: f32, thickness: f32) -> vec3f {
     let d_coord = uv + texel_size * vec2f(x, -thickness);    // down coordinate
-    let t_coord = uv + texel_size * vec2f(x,  thickness);    // top  coordinate
+    let t_coord = uv + texel_size * vec2f(x, thickness);    // top  coordinate
 
     return prepass_normal(t_coord) - prepass_normal(d_coord);
 }
 
 fn detect_edge_normal(uv: vec2f, thickness: f32) -> f32 {
     let deri_x = abs(
-        normal_gradient_x(uv,  thickness, thickness) +
-        2.0 * normal_gradient_x(uv,  0.0, thickness) +
-        normal_gradient_x(uv, -thickness, thickness));
+        normal_gradient_x(uv, thickness, thickness) + 2.0 * normal_gradient_x(uv, 0.0, thickness) + normal_gradient_x(uv, -thickness, thickness)
+    );
 
     let deri_y = abs(
-        normal_gradient_y(uv, thickness, thickness) +
-        2.0 * normal_gradient_y(uv, 0.0, thickness) +
-        normal_gradient_y(uv, -thickness, thickness));
+        normal_gradient_y(uv, thickness, thickness) + 2.0 * normal_gradient_y(uv, 0.0, thickness) + normal_gradient_y(uv, -thickness, thickness)
+    );
 
     let x_max = max(deri_x.x, max(deri_x.y, deri_x.z));
     let y_max = max(deri_y.x, max(deri_y.y, deri_y.z));
-    
+
     let grad = max(x_max, y_max);
 
     return f32(grad > ed_uniform.normal_threshold);
@@ -205,28 +193,22 @@ fn prepass_color(uv: vec2f) -> vec3f {
 
 fn color_gradient_x(uv: vec2f, y: f32, thickness: f32) -> vec3f {
     let l_coord = uv + texel_size * vec2f(-thickness, y);    // left  coordinate
-    let r_coord = uv + texel_size * vec2f( thickness, y);    // right coordinate
+    let r_coord = uv + texel_size * vec2f(thickness, y);    // right coordinate
 
     return prepass_color(r_coord) - prepass_color(l_coord);
 }
 
 fn color_gradient_y(uv: vec2f, x: f32, thickness: f32) -> vec3f {
     let d_coord = uv + texel_size * vec2f(x, -thickness);    // down coordinate
-    let t_coord = uv + texel_size * vec2f(x,  thickness);    // top  coordinate
+    let t_coord = uv + texel_size * vec2f(x, thickness);    // top  coordinate
 
     return prepass_color(t_coord) - prepass_color(d_coord);
 }
 
 fn detect_edge_color(uv: vec2f, thickness: f32) -> f32 {
-    let deri_x = 
-        color_gradient_x(uv,  thickness, thickness) +
-        2.0 * color_gradient_x(uv,  0.0, thickness) +
-        color_gradient_x(uv, -thickness, thickness);
+    let deri_x = color_gradient_x(uv, thickness, thickness) + 2.0 * color_gradient_x(uv, 0.0, thickness) + color_gradient_x(uv, -thickness, thickness);
 
-    let deri_y =
-        color_gradient_y(uv,  thickness, thickness) +
-        2.0 * color_gradient_y(uv,  0.0, thickness) +
-        color_gradient_y(uv, -thickness, thickness);
+    let deri_y = color_gradient_y(uv, thickness, thickness) + 2.0 * color_gradient_y(uv, 0.0, thickness) + color_gradient_y(uv, -thickness, thickness);
 
     let grad = max(length(deri_x), length(deri_y));
 
@@ -255,7 +237,7 @@ fn fragment(
     let near_world_pos = position_ndc_to_world(near_ndc_pos);
 
     let view_direction = calculate_view(near_world_pos);
-    
+
     let normal = prepass_normal_unpack(in.uv);
     let fresnel = 1.0 - saturate(dot(normal, view_direction));;
 
@@ -281,7 +263,7 @@ fn fragment(
 #endif
 
     var color = textureSample(screen_texture, texture_sampler, in.uv).rgb;
-    color = mix(color, ed_uniform.edge_color.rgb, edge);
+    color = mix(color, ed_uniform.edge_color.rgb, edge * ed_uniform.edge_color.a);
 
     return vec4f(color, 1.0);
 }
