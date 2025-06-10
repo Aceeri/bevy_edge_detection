@@ -281,7 +281,7 @@ fn fragment(
 #endif
 
     var color = textureSample(screen_texture, texture_sampler, in.uv).rgb;
-    color = mix(color, ed_uniform.edge_color.rgb, edge);
+    color = mix(color, ed_uniform.edge_color.rgb, edge * ed_uniform.edge_color.a);
 
     return vec4f(color, 1.0);
 }
