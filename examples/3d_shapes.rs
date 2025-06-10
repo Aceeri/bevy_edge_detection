@@ -24,7 +24,9 @@ fn main() {
             // please ensure that the rendering order of [`EdgeDetectionNode`] is set before [`SmaaNode`].
             before: Node3d::Smaa,
         })
-        .add_plugins(EguiPlugin)
+        .add_plugins(EguiPlugin {
+            enable_multipass_for_primary_context: false,
+        })
         .add_plugins(PanOrbitCameraPlugin)
         .add_systems(Startup, (setup, spawn_text))
         .add_systems(

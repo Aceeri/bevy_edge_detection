@@ -301,6 +301,7 @@ impl From<Option<&Projection>> for ProjectionType {
             return match projection {
                 Projection::Perspective(_) => Self::Perspective,
                 Projection::Orthographic(_) => Self::Orthographic,
+                Projection::Custom(_) => panic!(),
             };
         };
 
