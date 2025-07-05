@@ -415,6 +415,10 @@ pub struct EdgeDetection {
     /// Whether to enable color-based edge detection.
     /// If `true`, edges will be detected based on color variations.
     pub enable_color: bool,
+    pub depth_min_dist: f32,
+    pub depth_max_dist: f32,
+    pub normal_min_dist: f32,
+    pub normal_max_dist: f32,
 }
 
 impl Default for EdgeDetection {
@@ -439,6 +443,10 @@ impl Default for EdgeDetection {
             enable_depth: true,
             enable_normal: true,
             enable_color: false,
+            depth_min_dist: 60.0,
+            depth_max_dist: 100.0,
+            normal_min_dist: 60.0,
+            normal_max_dist: 100.0,
         }
     }
 }
@@ -459,6 +467,10 @@ pub struct EdgeDetectionUniform {
     pub uv_distortion: Vec4,
 
     pub edge_color: LinearRgba,
+    pub depth_min_dist: f32,
+    pub depth_max_dist: f32,
+    pub normal_min_dist: f32,
+    pub normal_max_dist: f32,
 }
 
 impl EdgeDetectionUniform {
@@ -505,6 +517,10 @@ impl From<&EdgeDetection> for EdgeDetectionUniform {
             ),
 
             edge_color: ed.edge_color.into(),
+            depth_min_dist: ed.depth_min_dist,
+            depth_max_dist: ed.depth_max_dist,
+            normal_min_dist: ed.normal_min_dist,
+            normal_max_dist: ed.normal_max_dist,
         }
     }
 }

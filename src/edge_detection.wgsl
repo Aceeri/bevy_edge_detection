@@ -42,6 +42,10 @@ struct EdgeDetectionUniform {
     // xy: distortion frequency; zw: distortion strength
     uv_distortion: vec4f,
     edge_color: vec4f,
+    depth_min_dist: f32,
+    depth_max_dist: f32,
+    normal_min_dist: f32,
+    normal_max_dist: f32,
 }
 
 // -----------------------
@@ -116,9 +120,13 @@ fn view_z_gradient_y(uv: vec2f, x: f32, thickness: f32) -> f32 {
 }
 
 fn detect_edge_depth(uv: vec2f, thickness: f32, fresnel: f32) -> f32 {
-    let deri_x = view_z_gradient_x(uv, thickness, thickness) + 2.0 * view_z_gradient_x(uv, 0.0, thickness) + view_z_gradient_x(uv, -thickness, thickness);
 
-    let deri_y = view_z_gradient_y(uv, thickness, thickness) + 2.0 * view_z_gradient_y(uv, 0.0, thickness) + view_z_gradient_y(uv, -thickness, thickness);
+    // Try Scharr kernel instead of Sobel
+    var deri_x = view_z_gradient_x(uv, thickness, thickness) + 2.0 * view_z_gradient_x(uv, 0.0, thickness) + view_z_gradient_x(uv, -thickness, thickness);
+    var deri_y = view_z_gradient_y(uv, thickness, thickness) + 2.0 * view_z_gradient_y(uv, 0.0, thickness) + view_z_gradient_y(uv, -thickness, thickness);
+
+    // var deri_x = 3.0 * view_z_gradient_x(uv, thickness, thickness) + 10.0 * view_z_gradient_x(uv, 0.0, thickness) + 3.0 * view_z_gradient_x(uv, -thickness, thickness);
+    // var deri_y = 3.0 * view_z_gradient_y(uv, thickness, thickness) + 10.0 * view_z_gradient_y(uv, 0.0, thickness) + 3.0 * view_z_gradient_y(uv, -thickness, thickness);
 
     // why not `let grad = sqrt(deri_x * deri_x + deri_y * deri_y);`?
     //
@@ -128,9 +136,11 @@ fn detect_edge_depth(uv: vec2f, thickness: f32, fresnel: f32) -> f32 {
 
     let view_z = abs(prepass_view_z(uv));
 
+    // steep angle fucked aaaaa
     let steep_angle_adjustment = smoothstep(ed_uniform.steep_angle_threshold, 1.0, fresnel) * ed_uniform.steep_angle_multiplier * view_z;
 
-    return f32(grad > ed_uniform.depth_threshold * (1.0 + steep_angle_adjustment));
+    let distance_fade = 1.0 - smoothstep(ed_uniform.depth_min_dist, ed_uniform.depth_max_dist, abs(view_z));
+    return f32(grad > ed_uniform.depth_threshold * (1.0 + steep_angle_adjustment)) * distance_fade;
 }
 
 // -----------------------
@@ -180,7 +190,10 @@ fn detect_edge_normal(uv: vec2f, thickness: f32) -> f32 {
 
     let grad = max(x_max, y_max);
 
-    return f32(grad > ed_uniform.normal_threshold);
+    let view_z = abs(prepass_view_z(uv));
+    let distance_fade = 1.0 - smoothstep(ed_uniform.normal_min_dist, ed_uniform.normal_max_dist, abs(view_z));
+
+    return f32(grad > ed_uniform.normal_threshold) * distance_fade;
 }
 
 // ----------------------
@@ -239,7 +252,7 @@ fn fragment(
     let view_direction = calculate_view(near_world_pos);
 
     let normal = prepass_normal_unpack(in.uv);
-    let fresnel = 1.0 - saturate(dot(normal, view_direction));;
+    let fresnel = 1.0 - saturate(dot(normal, view_direction));
 
     let sample_uv = in.position.xy * min(texel_size.x, texel_size.y);
     let noise = textureSample(noise_texture, noise_sampler, sample_uv * ed_uniform.uv_distortion.xy);
@@ -266,4 +279,10 @@ fn fragment(
     color = mix(color, ed_uniform.edge_color.rgb, edge * ed_uniform.edge_color.a);
 
     return vec4f(color, 1.0);
+
+    // var depth = prepass_depth(uv);
+    // return vec4f(depth, depth, depth, 1.0);
+
+    // var normal2 = prepass_normal(uv);
+    // return vec4f(normal2, 1.0);
 }
