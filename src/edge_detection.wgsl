@@ -119,28 +119,75 @@ fn view_z_gradient_y(uv: vec2f, x: f32, thickness: f32) -> f32 {
     return prepass_view_z(t_coord) - prepass_view_z(d_coord);
 }
 
-fn detect_edge_depth(uv: vec2f, thickness: f32, fresnel: f32) -> f32 {
+fn world_position_from_uv(uv: vec2f) -> vec3f {
+    let ndc_depth = prepass_depth(uv);
+    let ndc = vec3f(uv_to_ndc(uv), ndc_depth);
+    return position_ndc_to_world(ndc);
+}
+
+fn world_position_gradient_x(uv: vec2f, y: f32, thickness: f32) -> f32 {
+    var l_coord = world_position_from_uv(uv + texel_size * vec2f(-thickness, y));    // left coordinate
+    var r_coord = world_position_from_uv(uv + texel_size * vec2f(thickness, y));    // right coordinate
+    l_coord.y *= 5.0;
+    r_coord.y *= 5.0;
+    return distance(l_coord, r_coord);
+}
+
+fn world_position_gradient_y(uv: vec2f, x: f32, thickness: f32) -> f32 {
+    var d_coord = world_position_from_uv(uv + texel_size * vec2f(x, -thickness));  // down coordinate
+    var t_coord = world_position_from_uv(uv + texel_size * vec2f(x, thickness));    // top coordinate
+    d_coord.y *= 5.0;
+    t_coord.y *= 5.0;
+    return distance(d_coord, t_coord);
+}
+
+fn detect_edge_depth(uv: vec2f, base_thickness: f32, fresnel: f32) -> f32 {
+    // if fresnel > 0.98 {
+    //     return 0.0;
+    // }
+
+    let view_z = abs(prepass_view_z(uv));
+    let depth = abs(prepass_depth(uv));
+    let depth_scale = min(depth, (1.0 - fresnel) * (1.0 - fresnel));
+
+    let thickness = clamp(base_thickness * depth_scale, 0.1, 1.0);
 
     // Try Scharr kernel instead of Sobel
-    var deri_x = view_z_gradient_x(uv, thickness, thickness) + 2.0 * view_z_gradient_x(uv, 0.0, thickness) + view_z_gradient_x(uv, -thickness, thickness);
-    var deri_y = view_z_gradient_y(uv, thickness, thickness) + 2.0 * view_z_gradient_y(uv, 0.0, thickness) + view_z_gradient_y(uv, -thickness, thickness);
+    // var deri_x = view_z_gradient_x(uv, thickness, thickness) + 2.0 * view_z_gradient_x(uv, 0.0, thickness) + view_z_gradient_x(uv, -thickness, thickness);
+    // var deri_y = view_z_gradient_y(uv, thickness, thickness) + 2.0 * view_z_gradient_y(uv, 0.0, thickness) + view_z_gradient_y(uv, -thickness, thickness);
 
-    // var deri_x = 3.0 * view_z_gradient_x(uv, thickness, thickness) + 10.0 * view_z_gradient_x(uv, 0.0, thickness) + 3.0 * view_z_gradient_x(uv, -thickness, thickness);
-    // var deri_y = 3.0 * view_z_gradient_y(uv, thickness, thickness) + 10.0 * view_z_gradient_y(uv, 0.0, thickness) + 3.0 * view_z_gradient_y(uv, -thickness, thickness);
+    var deri_x = 3.0 * world_position_gradient_x(uv, thickness, thickness) + 10.0 * world_position_gradient_x(uv, 0.0, thickness) + 3.0 * world_position_gradient_x(uv, -thickness, thickness);
+    var deri_y = 3.0 * world_position_gradient_y(uv, thickness, thickness) + 10.0 * world_position_gradient_y(uv, 0.0, thickness) + 3.0 * world_position_gradient_y(uv, -thickness, thickness);
+
+    deri_x /= 13.0;
+    deri_y /= 13.0;
+
+    // var deri_x = world_position_gradient_x(uv, thickness, thickness);
+    // var deri_y = world_position_gradient_y(uv, thickness, thickness);
+
+    // deri_x = clamp(deri_x, 0.0, 1.0);
+    // deri_y = clamp(deri_y, 0.0, 1.0);
 
     // why not `let grad = sqrt(deri_x * deri_x + deri_y * deri_y);`?
     //
     // Because ·deri_x· or ·deri_y· might be too large,
     // causing overflow in the calculation and resulting in incorrect results.
-    let grad = max(abs(deri_x), abs(deri_y));
+    // let grad = max(abs(deri_x), abs(deri_y));
+    let grad = sqrt(abs(deri_x) * abs(deri_x) + abs(deri_y) * abs(deri_y));
+    // extremify the gradient
+    var egrad = grad;
+    for (var i = 0; i < 2; i++) {
+        egrad *= 15.0 * egrad * 15.0 * depth * 15.0;
+        egrad = clamp(egrad, 0.0, 1.0);
+    }
+    // return egrad;
 
-    let view_z = abs(prepass_view_z(uv));
-
-    // steep angle fucked aaaaa
-    let steep_angle_adjustment = smoothstep(ed_uniform.steep_angle_threshold, 1.0, fresnel) * ed_uniform.steep_angle_multiplier * view_z;
+    // // // steep angle fucked aaaaa
+    let steep_angle_adjustment = smoothstep(ed_uniform.steep_angle_threshold, 1.0, fresnel) * ed_uniform.steep_angle_multiplier;
 
     let distance_fade = 1.0 - smoothstep(ed_uniform.depth_min_dist, ed_uniform.depth_max_dist, abs(view_z));
-    return f32(grad > ed_uniform.depth_threshold * (1.0 + steep_angle_adjustment)) * distance_fade;
+    return f32(egrad > ed_uniform.depth_threshold * (1.0 + steep_angle_adjustment)) * distance_fade;
+    // return f32(egrad > ed_uniform.depth_threshold) * distance_fade;
 }
 
 // -----------------------
@@ -278,6 +325,7 @@ fn fragment(
     var color = textureSample(screen_texture, texture_sampler, in.uv).rgb;
     color = mix(color, ed_uniform.edge_color.rgb, edge * ed_uniform.edge_color.a);
 
+    // return vec4f(edge_depth, edge_depth, edge_depth, 1.0);
     return vec4f(color, 1.0);
 
     // var depth = prepass_depth(uv);

@@ -443,10 +443,10 @@ impl Default for EdgeDetection {
             enable_depth: true,
             enable_normal: true,
             enable_color: false,
-            depth_min_dist: 60.0,
-            depth_max_dist: 100.0,
-            normal_min_dist: 60.0,
-            normal_max_dist: 100.0,
+            depth_min_dist: 50.0,
+            depth_max_dist: 90.0,
+            normal_min_dist: 50.0,
+            normal_max_dist: 90.0,
         }
     }
 }
